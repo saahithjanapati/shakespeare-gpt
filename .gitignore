@@ -1,0 +1,16 @@
+# Bytecode and cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+.env/
+
+# Tooling
+wandb/
+
+# Model artifacts
+model.pth
+
+# OS files
+.DS_Store

@@ -1,0 +1,10 @@
+[project]
+name = "shakespeare-gpt"
+version = "0.1.0"
+description = "Character-level GPT experiments on Shakespeare data."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "wandb",
+]
