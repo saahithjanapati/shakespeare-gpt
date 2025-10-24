@@ -10,6 +10,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import torch.nn.functional as F
 import wandb
+import random
 
 BLOCK_SIZE = 64
 N_EMBD = 128
@@ -97,6 +98,20 @@ def read_data_file(filename: str) -> str:
         return handle.read()
 
 # ------------------------------------------------------------
+def get_best_device():
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+    else:
+        device = torch.device('cpu')
+    return device
+
+
+device = get_best_device()
+
+
+
 
 # read and tokenize the data at the character level
 train_text = read_data_file("train.txt")
@@ -119,17 +134,7 @@ val_tokens = [stoi[c] for c in val_text]
 test_tokens = [stoi[c] for c in test_text]
 
 
-def get_best_device():
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-    else:
-        device = torch.device('cpu')
-    return device
 
-
-device = get_best_device()
 
 ############################################################################
 class ShakespeareDataset(Dataset):
@@ -363,7 +368,7 @@ TRAIN_BATCH_SIZE = 64
 EVAL_BATCH_SIZE = 128
 learning_rate = 1e-4
 
-num_epochs = 15000
+num_epochs = 2
 eval_every = 500
 print_every = 100
 sample_prefix = "WHEREFORE ARE THOU ROMEO"
@@ -425,6 +430,7 @@ wandb.init(
 wandb.watch(model, log="gradients", log_freq=print_every)
 
 iter_idx = 0
+total_num_iter = num_epochs * len(train_dataloader)
 # core training loop
 for epoch in range(num_epochs):
 
@@ -438,13 +444,13 @@ for epoch in range(num_epochs):
 
         if iter_idx % print_every == 0:
             train_loss = loss.item()
-            print(f"Iter - {iter_idx}, Train Loss: {train_loss}")
-            wandb.log({"train/loss": train_loss, "epoch": epoch, "iter": iter_idx})
+            print(f"Iter - {iter_idx}/{total_num_iter}, Train Loss: {train_loss}")
+            wandb.log({"train/loss": train_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
         
         if iter_idx % eval_every == 0:
             eval_loss = run_eval()
-            print(f"Iter - {iter_idx}, Val Loss: {eval_loss}")
-            wandb.log({"val/loss": eval_loss, "epoch": epoch, "iter": iter_idx})
+            print(f"Iter - {iter_idx}/{total_num_iter}, Val Loss: {eval_loss}")
+            wandb.log({"val/loss": eval_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
 
         if iter_idx % sample_every == 0:
             generations = generate(
@@ -457,8 +463,8 @@ for epoch in range(num_epochs):
             )
             if generations:
                 sample_text = generations[0]
-                print(f"Iter - {iter_idx}, Sample Generation:\n{sample_text}")
-                wandb.log({"sample/text": sample_text, "epoch": epoch, "iter": iter_idx})
+                print(f"Iter - {iter_idx}/{total_num_iter}, Sample Generation:\n{sample_text}")
+                wandb.log({"sample/text": sample_text, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
 
 
         iter_idx += 1
