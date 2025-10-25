@@ -1,0 +1,7 @@
+# Full Leaderboard
+
+All recorded experiments ranked by test loss.
+
+| Experiment | Test Loss | Val Loss | Train Loss | Details | W&B |
+| --- | --- | --- | --- | --- | --- |
+| [exp1](exp1/) | 1.5314 | 1.4494 | 1.3134 | A standard 6-layer GPT, 8 head, 128 embd-dim, block size 64, trained for one epoch | [link](https://wandb.ai/saahith/shakespeare-gpt/runs/ukt0p32d) |

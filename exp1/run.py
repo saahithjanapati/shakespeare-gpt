@@ -363,115 +363,121 @@ def generate(model, start_prompt, top_p=None, top_k=None, num_tokens=50, num_sam
 
 ##########################################
 
-# training time
-TRAIN_BATCH_SIZE = 64
-EVAL_BATCH_SIZE = 128
-learning_rate = 1e-4
 
-num_epochs = 2
-eval_every = 500
-print_every = 100
-sample_prefix = "WHEREFORE ARE THOU ROMEO"
-sample_every = 500
-num_sample_tokens = 200
-top_k = 13; top_p = None
+def main():
+    # training time
+    TRAIN_BATCH_SIZE = 64
+    EVAL_BATCH_SIZE = 128
+    learning_rate = 1e-4
 
-# define datasets
-train_dataset = ShakespeareDataset(split='train')
-val_dataset = ShakespeareDataset(split='val')
-# test_dataset = ShakespeareDataset(split='test')
+    num_epochs = 2
+    eval_every = 500
+    print_every = 100
+    sample_prefix = "WHEREFORE ARE THOU ROMEO"
+    sample_every = 500
+    num_sample_tokens = 200
+    top_k = 13; top_p = None
 
-# define dataloaders
-train_dataloader = DataLoader(train_dataset, batch_size = TRAIN_BATCH_SIZE, shuffle=True)
-val_dataloader = DataLoader(val_dataset, batch_size = EVAL_BATCH_SIZE, shuffle=False)
-# test_dataloader = DataLoader(test_dataset, batch_size = EVAL_BATCH_SIZE, shuffle=False)
-def run_eval():
-    model.eval()
-    total_loss = 0
-    num_samples = 0
-    with torch.no_grad():
-        for x, y in val_dataloader:
-            x = x.to(device)
-            y = y.to(device)
+    # define datasets
+    train_dataset = ShakespeareDataset(split='train')
+    val_dataset = ShakespeareDataset(split='val')
+    # test_dataset = ShakespeareDataset(split='test')
+
+    # define dataloaders
+    train_dataloader = DataLoader(train_dataset, batch_size = TRAIN_BATCH_SIZE, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size = EVAL_BATCH_SIZE, shuffle=False)
+    # test_dataloader = DataLoader(test_dataset, batch_size = EVAL_BATCH_SIZE, shuffle=False)
+    def run_eval():
+        model.eval()
+        total_loss = 0
+        num_samples = 0
+        with torch.no_grad():
+            for x, y in val_dataloader:
+                x = x.to(device)
+                y = y.to(device)
+                _, loss = model(x, labels=y)
+                total_loss += loss.item() * len(x)
+                num_samples +=  len(x)
+        model.train() # put back into training mode
+        return total_loss / num_samples
+
+
+
+    # define model and optimzier
+    model = GPT()
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+
+
+    run_name = "exp_1"
+    wandb.init(
+        project="shakespeare-gpt",
+        name=run_name,
+        config={
+            "block_size": BLOCK_SIZE,
+            "n_embd": N_EMBD,
+            "n_layers": N_LAYERS,
+            "n_head": N_HEAD,
+            "dropout": DROPOUT_PROB,
+            "use_bias": USE_BIAS,
+            "train_batch_size": TRAIN_BATCH_SIZE,
+            "eval_batch_size": EVAL_BATCH_SIZE,
+            "learning_rate": learning_rate,
+            "num_epochs": num_epochs,
+            "eval_every": eval_every,
+            "print_every": print_every,
+        },
+    )
+    wandb.watch(model, log="gradients", log_freq=print_every)
+
+    iter_idx = 0
+    total_num_iter = num_epochs * len(train_dataloader)
+    # core training loop
+    for epoch in range(num_epochs):
+
+        model.train()
+        for x,y in train_dataloader:
+            x, y = x.to(device), y.to(device)
             _, loss = model(x, labels=y)
-            total_loss += loss.item() * len(x)
-            num_samples +=  len(x)
-    model.train() # put back into training mode
-    return total_loss / num_samples
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if iter_idx % print_every == 0:
+                train_loss = loss.item()
+                print(f"Iter - {iter_idx}/{total_num_iter}, Train Loss: {train_loss}")
+                wandb.log({"train/loss": train_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
+            
+            if iter_idx % eval_every == 0:
+                eval_loss = run_eval()
+                print(f"Iter - {iter_idx}/{total_num_iter}, Val Loss: {eval_loss}")
+                wandb.log({"val/loss": eval_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
+
+            if iter_idx % sample_every == 0:
+                generations = generate(
+                    model,
+                    start_prompt=sample_prefix,
+                    top_p=top_p,
+                    top_k=top_k,
+                    num_tokens=num_sample_tokens,
+                    num_samples=1,
+                )
+                if generations:
+                    sample_text = generations[0]
+                    print(f"Iter - {iter_idx}/{total_num_iter}, Sample Generation:\n{sample_text}")
+                    wandb.log({"sample/text": sample_text, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
 
 
-
-# define model and optimzier
-model = GPT()
-model.to(device)
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+            iter_idx += 1
 
 
-
-run_name = "exp_1"
-wandb.init(
-    project="shakespeare-gpt",
-    name=run_name,
-    config={
-        "block_size": BLOCK_SIZE,
-        "n_embd": N_EMBD,
-        "n_layers": N_LAYERS,
-        "n_head": N_HEAD,
-        "dropout": DROPOUT_PROB,
-        "use_bias": USE_BIAS,
-        "train_batch_size": TRAIN_BATCH_SIZE,
-        "eval_batch_size": EVAL_BATCH_SIZE,
-        "learning_rate": learning_rate,
-        "num_epochs": num_epochs,
-        "eval_every": eval_every,
-        "print_every": print_every,
-    },
-)
-wandb.watch(model, log="gradients", log_freq=print_every)
-
-iter_idx = 0
-total_num_iter = num_epochs * len(train_dataloader)
-# core training loop
-for epoch in range(num_epochs):
-
-    model.train()
-    for x,y in train_dataloader:
-        x, y = x.to(device), y.to(device)
-        _, loss = model(x, labels=y)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if iter_idx % print_every == 0:
-            train_loss = loss.item()
-            print(f"Iter - {iter_idx}/{total_num_iter}, Train Loss: {train_loss}")
-            wandb.log({"train/loss": train_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
-        
-        if iter_idx % eval_every == 0:
-            eval_loss = run_eval()
-            print(f"Iter - {iter_idx}/{total_num_iter}, Val Loss: {eval_loss}")
-            wandb.log({"val/loss": eval_loss, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
-
-        if iter_idx % sample_every == 0:
-            generations = generate(
-                model,
-                start_prompt=sample_prefix,
-                top_p=top_p,
-                top_k=top_k,
-                num_tokens=num_sample_tokens,
-                num_samples=1,
-            )
-            if generations:
-                sample_text = generations[0]
-                print(f"Iter - {iter_idx}/{total_num_iter}, Sample Generation:\n{sample_text}")
-                wandb.log({"sample/text": sample_text, "epoch": epoch, "iter": iter_idx}, step=iter_idx)
+    # save the model state at the end so we can evaluate later (we don't really need the optimizer, but just in case)
+    model_path = SCRIPT_DIR / "model.pth"
+    torch.save(model.state_dict(), model_path)
+    wandb.save(str(model_path))
+    wandb.finish()
 
 
-        iter_idx += 1
-
-
-# save the model state at the end so we can evaluate later (we don't really need the optimizer, but just in case)
-model_path = SCRIPT_DIR / "model.pth"
-torch.save(model.state_dict(), model_path)
-wandb.save(str(model_path))
-wandb.finish()
+if __name__ == "__main__":
+    main()

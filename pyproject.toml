@@ -6,5 +6,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "torch",
+    "tqdm>=4.67.1",
     "wandb",
 ]

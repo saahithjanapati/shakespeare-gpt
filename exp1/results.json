@@ -1,0 +1,6 @@
+{
+  "train_loss": 1.313401445056185,
+  "validation_loss": 1.449355456387751,
+  "test_loss": 1.5313648865279,
+  "wandb_run": "https://wandb.ai/saahith/shakespeare-gpt/runs/ukt0p32d"
+}
