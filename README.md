@@ -13,7 +13,7 @@ The project uses [uv](https://docs.astral.sh/uv/) for Python version and depende
 Top 5 experiments by test loss. [View the full leaderboard](full_leaderboard.md).
 
 <!-- leaderboard:start -->
-| Experiment | Test Loss | Val Loss | Train Loss | Details | W&B |
-| --- | --- | --- | --- | --- | --- |
-| [exp1](exp1/) | 1.5314 | 1.4494 | 1.3134 | A standard 6-layer GPT, 8 head, 128 embd-dim, block size 64, trained for one epoch | [link](https://wandb.ai/saahith/shakespeare-gpt/runs/ukt0p32d) |
+| Experiment | Test Loss | Val Loss | Train Loss | Details | Generation | W&B |
+| --- | --- | --- | --- | --- | --- | --- |
+| [exp1](exp1/) | 1.5314 | 1.4494 | 1.3134 | A standard 6-layer GPT, 8 head, 128 embd-dim, block size 64, trained for one epoch | [text](exp1/generation.txt) | [link](https://wandb.ai/saahith/shakespeare-gpt/runs/ukt0p32d) |
 <!-- leaderboard:end -->

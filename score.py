@@ -149,7 +149,6 @@ def get_best_device():
         device = torch.device('cpu')
     return device
 
-
 device = get_best_device()
 # compute the loss on train, val, and test sets of the specified model
 model = GPT()
@@ -167,6 +166,7 @@ val_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=256)
 test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=256)
 
 
+
 def run_eval(model, dataloader):
     total_loss = 0
     num_samples = 0
@@ -182,27 +182,131 @@ def run_eval(model, dataloader):
 
 
 
-print(f"Evaluating {path_to_model} on Training Set")
-train_loss = run_eval(model, train_dataloader)
-
-print(f"Evaluating {path_to_model} on Validation Set")
-val_loss = run_eval(model, val_dataloader)
-
-print(f"Evaluating {path_to_model} on Test Set")
-test_loss = run_eval(model, test_dataloader)
-
-path_to_results_file = path_to_experiment / "results.json"
-results_json = {
-    "train_loss": train_loss,
-    "validation_loss": val_loss,
-    "test_loss": test_loss,
-    "wandb_run": ""
-}
-
-with open(path_to_results_file, "w") as f:
-    json.dump(results_json, f, indent=2)
+def pick_next_greedy(model, inp):
+    """
+    pick next tokens with greedy decoding
+    """
+    logits, _ = model(inp) # (B, V)
+    logits = logits[:, -1, :] # select only last token logits
+    _, max_idx = torch.max(logits, dim=1, keepdim=True) #(B, 1)
+    return max_idx
 
 
-# write to file
-# write file to experiment 
-# update leaderboard
+
+def pick_next_top_p(model, inp, p):
+    """
+    model chooses from the smallest possible set of tokens whose cumulative probability mass exceeds p
+    """
+    logits, _ = model(inp) # (B, V)
+    # compute probabilities
+    logits = logits[:, -1, :] # select only last token logits
+    probs = torch.softmax(logits, dim=1) # (B, V)
+    sorted_probs, sorted_indices = torch.sort(probs, dim=1, descending=True) # (B, V)
+    cumsum = torch.cumsum(sorted_probs, dim=1)
+
+    sorted_probs = torch.where(cumsum - sorted_probs <= p, sorted_probs, 0) # (B, V)
+    sorted_probs = sorted_probs / torch.sum(sorted_probs, dim=1, keepdim= True) 
+
+    selected_indices = torch.multinomial(sorted_probs, 1) # (B, 1)
+    actual_indices = torch.gather(sorted_indices, 1, selected_indices)
+    return actual_indices
+
+
+
+def pick_next_top_k(model, inp, k):
+    """
+    - randomly sample among the top k tokens
+    """
+    logits, _ = model(inp) # (B, T, V)
+    logits = logits[:, -1, :] # select only last token logits
+    topk_vals, _ = torch.topk(logits, k=k, dim=1) # (B, k)
+    kth_vals = topk_vals[:, [-1]]
+    masked_logits = torch.where(logits >= kth_vals, logits, -float('inf')) # set non-topk values to zero # (B, V)
+    masked_probs = torch.softmax(masked_logits, dim=1)
+    next_logits = torch.multinomial(masked_probs, 1) # (B,1)
+    return next_logits
+
+
+
+def generate(model, start_prompt, top_p=None, top_k=None, num_tokens=50, num_samples=16):
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        start_tokens = []
+        # tokenize the start prompt
+        for c in start_prompt:
+            if c not in stoi:
+                raise ValueError(f"{c} was found in start_prompt for generate, but is not present in vocabulary")
+            start_tokens.append(stoi[c])
+
+        inp = torch.tensor(start_tokens, dtype=torch.long)
+        inp = inp.to(next(model.parameters()).device)
+        inp = inp.view(1, -1).expand(num_samples, inp.size(0))
+
+        for i in range(num_tokens):
+            if inp.size(1) > BLOCK_SIZE:
+                x = inp[:, -BLOCK_SIZE:]
+            else:
+                x = inp
+
+            if top_p:
+                next_tokens = pick_next_top_p(model, x, top_p)
+            elif top_k:
+                next_tokens = pick_next_top_k(model, x, top_k)
+            else:
+                next_tokens = pick_next_greedy(model, x)
+
+            # concatenate with inp
+            inp = torch.cat([inp, next_tokens], dim=1)
+        
+        # move back to cpu, decode back to strings and return
+        generations = []
+        inp = inp.cpu()
+        for i in range(len(inp)):
+            curr_generation = "".join([itos[i] for i in inp[i, :].tolist()])
+            generations.append(curr_generation)
+
+    if was_training:
+        model.train()
+    return generations
+
+
+
+
+
+
+
+def main():
+    print(f"Evaluating {path_to_model} on Training Set")
+    train_loss = run_eval(model, train_dataloader)
+
+    print(f"Evaluating {path_to_model} on Validation Set")
+    val_loss = run_eval(model, val_dataloader)
+
+    print(f"Evaluating {path_to_model} on Test Set")
+    test_loss = run_eval(model, test_dataloader)
+
+    path_to_results_file = path_to_experiment / "results.json"
+    results_json = {
+        "train_loss": train_loss,
+        "validation_loss": val_loss,
+        "test_loss": test_loss,
+        "wandb_run": ""
+    }
+
+    with open(path_to_results_file, "w") as f:
+        json.dump(results_json, f, indent=2)
+
+
+    generation_prefix = "ROMEO, ROMEO, WHEREFORE ARE THOU ROMEO?"
+    generation_list = generate(model, generation_prefix, top_p=0.85, num_tokens=1000, num_samples=1)
+    generation = generation_list[0]
+    
+    with open(path_to_experiment / "generation.txt", 'w') as f:
+        f.write("Sample Generation with top-p (nuclueus) sampling, p=0.85 \n-----------------------------------------------------\n\n")
+        f.write(generation)
+
+
+
+if __name__ == "__main__":
+    main()
