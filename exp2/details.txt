@@ -1,0 +1,1 @@
+RoPE Embeddings + a standard 6-layer GPT, 8 head, 128 embd-dim, block size 64, trained for one epoch
