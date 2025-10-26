@@ -1,4 +1,4 @@
-Experimenting with GPT on Shakespeare Dataset
+Language Modeling Experiments on Shakespeare Dataset
 
 ## Environment
 
